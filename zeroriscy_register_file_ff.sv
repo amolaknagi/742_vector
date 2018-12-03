@@ -46,7 +46,6 @@ module zeroriscy_register_file
   input  logic [4:0]             raddr_b_i,
   output logic [DATA_WIDTH-1:0]  rdata_b_o,
 
-
   // Write port W1
   input  logic [4:0]              waddr_a_i,
   input  logic [DATA_WIDTH-1:0]   wdata_a_i,

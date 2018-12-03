@@ -196,6 +196,7 @@ module zeroriscy_id_stage
   logic [31:0] imm_s3_type;
   logic [31:0] imm_vs_type;
   logic [31:0] imm_vu_type;
+  logic [31:0] imm_vec_type;
 
   logic [31:0] imm_a;       // contains the immediate for operand b
   logic [31:0] imm_b;       // contains the immediate for operand b
@@ -254,6 +255,20 @@ module zeroriscy_id_stage
   logic [31:0] alu_operand_a;
   logic [31:0] alu_operand_b;
 
+  // Vector instruction
+  logic [3:0][31:0] vec_alu_operand_a;
+  logic [3:0][31:0] vec_alu_operand_b;
+  logic [3:0][31:0] vec_regfile_data_ra_id;
+  logic [3:0][31:0] vec_regfile_data_rb_id;
+  logic vec_instr_en;
+  logic vec_regfile_we;
+  logic [2:0] vec_alu_op_b_mux_sel;
+  logic [4:0] vs1;
+  logic [4:0] vs2;
+  logic [4:0] vd;
+  logic [ALU_OP_WIDTH-1:0] vec_alu_operator;
+
+
   assign instr = instr_rdata_i;
 
   // immediate extraction and sign extension
@@ -272,6 +287,9 @@ module zeroriscy_id_stage
   assign imm_s3_type = { 27'b0, instr[29:25] };
   assign imm_vs_type = { {26 {instr[24]}}, instr[24:20], instr[25] };
   assign imm_vu_type = { 26'b0, instr[24:20], instr[25] };
+
+  // Vector immediate (is imm sign extended?)
+  assign imm_vec_type = {24'b0, instr[27:20]};
 
   //---------------------------------------------------------------------------
   // source register selection
@@ -335,6 +353,8 @@ module zeroriscy_id_stage
    end
 
 
+  assign vec_alu_operand_a = vec_regfile_data_ra_id;
+
   //////////////////////////////////////////////////////
   //   ___                                 _   ____   //
   //  / _ \ _ __   ___ _ __ __ _ _ __   __| | | __ )  //
@@ -359,6 +379,7 @@ module zeroriscy_id_stage
         IMMB_VU:     imm_b = imm_vu_type;
         IMMB_UJ:     imm_b = imm_uj_type;
         IMMB_SB:     imm_b = imm_sb_type;
+        IMMB_VEC:    imm_b = imm_vec_type;
         default:     imm_b = imm_i_type;
       endcase
     end
@@ -375,6 +396,26 @@ module zeroriscy_id_stage
 
   assign alu_operand_b   = operand_b;
   assign operand_b_fw_id = regfile_data_rb_id;
+
+  // Vector operand B
+  logic [3:0][31:0] vec_imm;
+  always_comb begin
+    vec_imm[0] = {{24{instr[27]}}, instr[27:20]};
+    vec_imm[1] = {{24{instr[27]}}, instr[27:20]};
+    vec_imm[2] = {{24{instr[27]}}, instr[27:20]};
+    vec_imm[3] = {{24{instr[27]}}, instr[27:20]};
+  end
+
+  always_comb begin
+    unique case (vec_alu_op_b_mux_sel)
+      VEC_OP_B_REG: begin
+        vec_alu_operand_b = vec_regfile_data_rb_id;
+      end
+      VEC_OP_B_IMM: begin
+        vec_alu_operand_b = vec_imm;
+      end
+    endcase
+  end
 
   /////////////////////////////////////////////////////////
   //  ____  _____ ____ ___ ____ _____ _____ ____  ____   //
@@ -436,6 +477,28 @@ module zeroriscy_id_stage
 
   assign multdiv_int_en  = mult_int_en | div_int_en;
 
+  // Vector regfile
+  assign vd  = instr[11:7];
+  assign vs1 = instr[19:15];
+  assign vs2 = instr[24:20];
+
+  zeroriscy_vector_register_file
+  registers_v
+  (
+    .clk(clk),
+    .rst_n(rst_n),
+
+    .raddr_a_i(vs1),
+    .rdata_a_o(vec_regfile_data_ra_id),
+
+    .raddr_b_i(vs2),
+    .rdata_b_o(vec_regfile_data_rb_id),
+
+    .waddr_a_i(vd),
+    .wdata_a_i(), // Ford fill this in
+    .we_a_i(vec_regfile_we)
+  );
+
   ///////////////////////////////////////////////
   //  ____  _____ ____ ___  ____  _____ ____   //
   // |  _ \| ____/ ___/ _ \|  _ \| ____|  _ \  //
@@ -474,6 +537,12 @@ module zeroriscy_id_stage
 
     .imm_a_mux_sel_o                 ( imm_a_mux_sel             ),
     .imm_b_mux_sel_o                 ( imm_b_mux_sel             ),
+
+    // Vector signals
+    .vec_instr_o(vec_instr_en),
+    .vec_regfile_we(vec_regfile_we),
+    .vec_alu_op_b_mux_sel_o(vec_alu_op_b_mux_sel),
+    .vec_alu_operator_o(vec_alu_operator),
 
     .mult_int_en_o                   ( mult_int_en               ),
     .div_int_en_o                    ( div_int_en                ),

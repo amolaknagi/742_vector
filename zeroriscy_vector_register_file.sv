@@ -24,7 +24,11 @@ module zeroriscy_vector_register_file
 
 	always_ff @(posedge clk, negedge rst_n) begin
 		if (~rst_n) begin
-			vec_reg <= 0;
+			for (int j = 0; j < 16; j++) begin
+				for (int k = 0; k < 4; k++) begin
+					vec_reg[j][k] <= 32'd0;
+				end
+			end
 		end
 		else begin
 			if (we_a_i) begin

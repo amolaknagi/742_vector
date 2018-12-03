@@ -58,6 +58,13 @@ module zeroriscy_decoder
   output logic [0:0]  imm_a_mux_sel_o,         // immediate selection for operand a
   output logic [3:0]  imm_b_mux_sel_o,         // immediate selection for operand b
 
+  // Vector signals
+  output logic        vec_instr_o,
+  output logic        vec_regfile_we,
+  output logic [1:0]  vec_alu_op_b_mux_sel_o,
+  output logic [ALU_OP_WIDTH-1:0] vec_alu_operator_o,
+
+
   // MUL, DIV related control signals
   output logic        mult_int_en_o,          // perform integer multiplication
   output logic        div_int_en_o,           // perform integer division or reminder
@@ -138,6 +145,11 @@ module zeroriscy_decoder
     mret_insn_o                 = 1'b0;
     ecall_insn_o                = 1'b0;
     pipe_flush_o                = 1'b0;
+
+    vec_instr_o                 = 1'b0;
+    vec_regfile_we              = 1'b0;
+    vec_alu_op_b_mux_sel_o      = VEC_OP_B_IMM;
+    vec_alu_operator_o          = ALU_SLTU;
 
     unique case (instr_rdata_i[6:0])
 
@@ -459,7 +471,76 @@ module zeroriscy_decoder
         end
       end
 
+      // VECTOR 
+      OPCODE_VECTOR_ALU: begin
+        vec_instr_o = 1'b1;
+        vec_alu_op_b_mux_sel_o = VEC_OP_B_IMM;
+        unique case ({instr_rdata_i[31:28]})
+          // Handle Imm-to-Reg Vector ops
+          OP_VADDI: begin
+            vec_alu_operator_o = ALU_ADD;
+            vec_regfile_we  = 1'b1;
+          end
+          OP_VSLI: begin
+            vec_alu_operator_o = ALU_SLL;
+            vec_regfile_we  = 1'b1;
+          end
+          OP_VSRLI: begin
+            vec_alu_operator_o = ALU_SRL;
+            vec_regfile_we  = 1'b1;
+          end
+          OP_VSRAI: begin
+            vec_alu_operator_o = ALU_SRA;
+            vec_regfile_we  = 1'b1;
+          end
 
+          // Set illegal for now
+          OP_VSETVL, OP_VCONFIG: begin
+            illegal_insn_o = 1'b1;
+          end
+
+          // Vector Register-to-Register Instructions
+          // If not, then illegal
+          default: begin
+            vec_alu_op_b_mux_sel_o = VEC_OP_B_REG;
+            // SET ALU OPERAND B
+            unique case ({instr_rdata_i[31:25]})
+              OP_VADD: begin
+                vec_alu_operator_o = ALU_ADD;
+                vec_regfile_we  = 1'b1;
+              end
+              OP_VSUB: begin
+                vec_alu_operator_o = ALU_SUB;
+                vec_regfile_we  = 1'b1;
+              end
+              OP_VMUL: begin
+                vec_alu_operator_o = ALU_MUL;
+                vec_regfile_we  = 1'b1;
+              end
+              OP_VSRL: begin
+                vec_alu_operator_o = ALU_SRL;
+                vec_regfile_we  = 1'b1;
+              end
+              OP_VSRA: begin
+                vec_alu_operator_o = ALU_SRA;
+                vec_regfile_we  = 1'b1;
+              end
+              OP_VSL: begin
+                vec_alu_operator_o = ALU_SLL;
+                vec_regfile_we  = 1'b1;
+              end
+              default: begin
+                illegal_insn_o = 1'b1;
+              end
+            endcase
+          end
+        endcase
+
+      end
+
+      OPCODE_VECTOR_NON_ALU: begin
+        vec_instr_o = 1'b1;
+      end
 
 
       ////////////////////////////////////////////////
